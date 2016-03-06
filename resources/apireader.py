@@ -3,6 +3,7 @@
 import sys
 import os.path
 import requests
+import requests.exceptions
 import json
 from argparse import ArgumentParser
 

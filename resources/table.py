@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import os
+from ipaddress import ip_network, ip_address, IPv6Address
+
+import yaml
+
+from prettytable import PrettyTable
+
+
+def mknettable(family, communities):
+    table = PrettyTable(['Network', 'Community', 'AS'])
+    table.align = 'l'
+    nets = list()
+
+    for community, data in communities:
+        if 'networks' not in data:
+            continue
+
+        if family not in data['networks']:
+            continue
+
+        for net in data['networks'][family]:
+            nets.append((ip_network(net), community, data['asn'] if 'asn' in data else '(n/a)'))
+
+    for net in sorted(nets, key=lambda data: data[0]):
+        table.add_row(net)
+
+    return table
+
+
+def mkasntable(data):
+    table = PrettyTable(['ASN', 'Community', 'Tech-C'])
+    table.sortby = 'ASN'
+    table.align = 'l'
+    table.align['ASN'] = 'r'
+
+    for community, cdata in data:
+        asn = cdata['asn'] if 'asn' in cdata else 0
+        techc = ", ".join(cdata['tech-c']) if 'tech-c' in cdata else 'n/a'
+        table.add_row([asn, community, techc])
+
+    return table
+
+
+def mkbgptable(data):
+    table = PrettyTable(['IPv6', 'IPv4', 'Name', 'Community'])
+    table.align = 'l'
+    bgp = list()
+
+    for community, cdata in data:
+        if 'bgp' not in cdata:
+            continue
+
+        for name, host in cdata['bgp'].items():
+            ipv4 = ip_address(host['ipv4']) if 'ipv4' in host else 'n/a'
+            ipv6 = ip_address(host['ipv6']) if 'ipv6' in host else 'n/a'
+            bgp.append((ipv6, ipv4, name, community))
+
+    for row in sorted(bgp, key=lambda x: x[0] if isinstance(x[0], IPv6Address) else ip_address("::")):
+        table.add_row(row)
+
+    return table
+
+
+def mktable(srcdir):
+    data = list()
+
+    for fname in sorted(list(set(os.listdir(srcdir)))):
+        if fname.startswith('.'):
+            continue
+
+        if fname.startswith('README'):
+            continue
+
+        fpath = os.path.join(srcdir, fname)
+        if os.path.isfile(fpath):
+            with open(fpath) as handle:
+                data.append((fname, yaml.load(handle)))
+
+    # Table: ASN Allocations and Contact
+    print("{}\n".format(mkasntable(data)))
+
+    # Table: Network Alllocations
+    print("{}\n".format(mknettable('ipv6', data)))
+    print("{}\n".format(mknettable('ipv4', data)))
+
+    # Table: BGP Peers
+    print("{}\n".format(mkbgptable(data)))
